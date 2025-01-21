@@ -16,7 +16,7 @@ The abstract computer which runs the code stored in an
 from dataclasses import dataclass
 from typing import List, Optional, Set, Tuple, Union
 
-from ethereum_types.bytes import Bytes, Bytes0, Bytes32
+from ethereum_types.bytes import Bytes, Bytes0, Bytes32, Bytes256
 from ethereum_types.numeric import U64, U256, Uint
 
 from ethereum.crypto.hash import Hash32, keccak256
@@ -25,10 +25,9 @@ from ..blocks import Log
 from ..fork_types import Address, VersionedHash
 from ..state import State, TransientStorage, account_exists_and_is_empty
 from .precompiled_contracts import RIPEMD160_ADDRESS
-from .memory import memory_read_bytes
 
 __all__ = ("Environment", "Evm", "Message")
-# Magic number converted to K
+# Magic number for transaction logs converted to Keccak Hash
 MAGIC_LOG_KHASH = keccak256(Hash32(b"42"))
 
 
@@ -156,7 +155,6 @@ def incorporate_child_on_error(evm: Evm, child_evm: Evm) -> None:
 
 def tx_log(
     evm: Evm,
-    memory_start: U256,
     sender: Address,
     recipient: Address,
     tx_amount: U256,
@@ -166,21 +164,14 @@ def tx_log(
 
     Args:
         evm (Evm): The state of the ethereum virtual machine
-        memory_start (U256): The position in memory we start reading from
         sender (Address): The account address sending the transfer
         recipient (Address): The address of the transfer recipient account
-        tx_amount (U256): The amount of ETH transacted in (TODO) Wei?
+        tx_amount (U256): The amount of ETH transacted
     """
-    # TODO The value of data_size should be derived from tx_amount I think.
-    # Is tx_amount in Wei? This comes from the 'val' param of CALL or CALLCODE.
-    # I need the size of that amount for the memory.memory_read_bytes
-    # function where size is "Size of the data that needs to be read from
-    # `start_position`" and I suspect this is not the same thing as the
-    # amount of Wei in the tx.
     log_entry = Log(
         address=evm.message.current_target,
         topics=(MAGIC_LOG_KHASH, Hash32(sender), Hash32(recipient)),
-        data=memory_read_bytes(evm.memory, memory_start, tx_amount),
+        data=Bytes256(tx_amount.to_be_bytes),
     )
 
     evm.logs = evm.logs + (log_entry,)
